@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en-US">
+    <head>
+        <meta charset="utf-8"> 
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="author" content="Yori Fang" />
+        <meta name="copyright" content="Yori Fang" />
+
+        <meta property="og:type" content="article" />
+        <meta name="twitter:card" content="summary">
+
+
+<meta property="og:title" content="jprobe example "/>
+<meta property="og:url" content="https://colo-ft.github.io/pages/jprobe.html" />
+<meta property="og:description" content="jprobe example" />
+<meta property="og:site_name" content="Tiny-boat" />
+<meta property="og:article:author" content="Yori Fang" />
+<meta property="og:article:published_time" content="2017-09-17T23:00:00+08:00" />
+<meta property="" content="2017-09-17T23:00:00+08:00" />
+<meta name="twitter:title" content="jprobe example ">
+<meta name="twitter:description" content="jprobe example">
+
+        <title>jprobe example  · Tiny-boat
+</title>
+        <link href="//netdna.bootstrapcdn.com/twitter-bootstrap/2.3.2/css/bootstrap-combined.min.css" rel="stylesheet">
+        <link href="//netdna.bootstrapcdn.com/font-awesome/4.0.1/css/font-awesome.css" rel="stylesheet">
+        <link rel="stylesheet" type="text/css" href="https://colo-ft.github.io/theme/css/pygments.css" media="screen">
+        <link rel="stylesheet" type="text/css" href="https://colo-ft.github.io/theme/tipuesearch/tipuesearch.css" media="screen">
+        <link rel="stylesheet" type="text/css" href="https://colo-ft.github.io/theme/css/elegant.css" media="screen">
+        <link rel="stylesheet" type="text/css" href="https://colo-ft.github.io/theme/css/custom.css" media="screen">
+    </head>
+    <body>
+        <div id="content-sans-footer">
+        <div class="navbar navbar-static-top">
+            <div class="navbar-inner">
+                <div class="container-fluid">
+                    <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                    </a>
+                    <a class="brand" href="https://colo-ft.github.io/"><span class=site-name>Tiny-boat</span></a>
+                    <div class="nav-collapse collapse">
+                        <ul class="nav pull-right top-menu">
+                            <li ><a href="https://colo-ft.github.io">Home</a></li>
+                            <li  class="active"><a href="https://colo-ft.github.io/pages/jprobe.html">jprobe example</a></li>
+                            <li ><a href="https://colo-ft.github.io/categories.html">Categories</a></li>
+                            <li ><a href="https://colo-ft.github.io/tags.html">Tags</a></li>
+                            <li ><a href="https://colo-ft.github.io/archives.html">Archives</a></li>
+                            <li><form class="navbar-search" action="https://colo-ft.github.io/search.html" onsubmit="return validateForm(this.elements['q'].value);"> <input type="text" class="search-query" placeholder="Search" name="q" id="tipue_search_input"></form></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="container-fluid">
+            <div class="row-fluid">
+                <div class="span1"></div>
+                <div class="span10">
+<article>
+<div class="row-fluid">
+    <header class="page-header span10 offset2">
+    <h1><a href="https://colo-ft.github.io/pages/jprobe.html"> jprobe example  </a></h1>
+    </header>
+</div>
+
+<div class="row-fluid">
+        <div class="span8 offset2 article-content">
+
+            <p>有时候想知道下发某个操作后内核在做些什么，这个时候就要内内核进行调试， 然而KGDB这种方法操作起来相对麻烦，这个时候我们就可以使用kprobe/jprobe/kretprobe来窥视内核的行为。</p>
+<p>介绍kprobe的文档为:<a href="https://www.kernel.org/doc/Documentation/kprobes.txt">https://www.kernel.org/doc/Documentation/kprobes.txt</a></p>
+<p>jprobe适合用来观察被探测函数的入参，kretprobe适合用来观察被探测函数的返回值，而kprobe则更加灵活。</p>
+<p>下面举一个最简单的例子，介绍如何使用jprobe来查看<em>_do_fork</em>这个函数的调用情况。</p>
+<div class="highlight"><pre><span></span><span class="cm">/*</span>
+<span class="cm">* Here&#39;s a sample kernel module showing the use of jprobes to dump</span>
+<span class="cm">* the arguments of _do_fork().</span>
+<span class="cm">*</span>
+<span class="cm">* For more information on theory of operation of jprobes, see</span>
+<span class="cm">* Documentation/kprobes.txt</span>
+<span class="cm">*</span>
+<span class="cm">* Build and insert the kernel module as done in the kprobe example.</span>
+<span class="cm">* You will see the trace data in /var/log/messages and on the</span>
+<span class="cm">* console whenever _do_fork() is invoked to create a new process.</span>
+<span class="cm">* (Some messages may be suppressed if syslogd is configured to</span>
+<span class="cm">* eliminate duplicate messages.)</span>
+<span class="cm">*/</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;linux/kernel.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;linux/module.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span> <span class="cpf">&lt;linux/kprobes.h&gt;</span><span class="cp"></span>
+
+<span class="cm">/*</span>
+<span class="cm">* Jumper probe for _do_fork.</span>
+<span class="cm">* Mirror principle enables access to arguments of the probed routine</span>
+<span class="cm">* from the probe handler.</span>
+<span class="cm">*/</span>
+
+<span class="cm">/* Proxy routine having the same arguments as actual _do_fork() routine */</span>
+<span class="k">static</span> <span class="kt">long</span> <span class="nf">j_do_fork</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">clone_flags</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">stack_start</span><span class="p">,</span>
+        <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">stack_size</span><span class="p">,</span> <span class="kt">int</span> <span class="n">__user</span> <span class="o">*</span><span class="n">parent_tidptr</span><span class="p">,</span>
+        <span class="kt">int</span> <span class="n">__user</span> <span class="o">*</span><span class="n">child_tidptr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">tls</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">pr_info</span><span class="p">(</span><span class="s">&quot;jprobe: clone_flags = 0x%lx, stack_start = 0x%lx &quot;</span>
+        <span class="s">&quot;stack_size = 0x%lx</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">clone_flags</span><span class="p">,</span> <span class="n">stack_start</span><span class="p">,</span> <span class="n">stack_size</span><span class="p">);</span>
+
+    <span class="cm">/* Always end with a call to jprobe_return(). */</span>
+    <span class="n">jprobe_return</span><span class="p">();</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="k">struct</span> <span class="n">jprobe</span> <span class="n">my_jprobe</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="p">.</span><span class="n">entry</span>          <span class="o">=</span> <span class="n">j_do_fork</span><span class="p">,</span>
+    <span class="p">.</span><span class="n">kp</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">symbol_name</span>    <span class="o">=</span> <span class="s">&quot;_do_fork&quot;</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">};</span>
+
+<span class="k">static</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">jprobe_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">register_jprobe</span><span class="p">(</span><span class="o">&amp;</span><span class="n">my_jprobe</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;register_jprobe failed, returned %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">ret</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;Planted jprobe at %p, handler addr %p</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+        <span class="n">my_jprobe</span><span class="p">.</span><span class="n">kp</span><span class="p">.</span><span class="n">addr</span><span class="p">,</span> <span class="n">my_jprobe</span><span class="p">.</span><span class="n">entry</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="n">__exit</span> <span class="nf">jprobe_exit</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">unregister_jprobe</span><span class="p">(</span><span class="o">&amp;</span><span class="n">my_jprobe</span><span class="p">);</span>
+    <span class="n">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;jprobe at %p unregistered</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">my_jprobe</span><span class="p">.</span><span class="n">kp</span><span class="p">.</span><span class="n">addr</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">module_init</span><span class="p">(</span><span class="n">jprobe_init</span><span class="p">)</span>
+<span class="n">module_exit</span><span class="p">(</span><span class="n">jprobe_exit</span><span class="p">)</span>
+<span class="n">MODULE_LICENSE</span><span class="p">(</span><span class="s">&quot;GPL&quot;</span><span class="p">);</span>
+</pre></div>
+
+
+<p>使用下面的Makefile文件，对其进行编译。</p>
+<div class="highlight"><pre><span></span><span class="nv">obj-m</span> <span class="o">:=</span> jprobe_example.o
+
+<span class="nv">CROSS_COMPILE</span><span class="o">=</span><span class="s1">&#39;&#39;</span>
+
+<span class="nv">KDIR</span> <span class="o">:=</span> /lib/modules/<span class="k">$(</span>shell uname -r<span class="k">)</span>/build
+<span class="nf">all</span><span class="o">:</span>  
+    make -C <span class="k">$(</span>KDIR<span class="k">)</span> <span class="nv">M</span><span class="o">=</span><span class="k">$(</span>PWD<span class="k">)</span> modules   
+<span class="nf">clean</span><span class="o">:</span>  
+    rm -f *.ko *.o *.mod.o *.mod.c .*.cmd *.symvers  modul*
+</pre></div>
+
+
+<p>编译完成后会生产一个名为<em>jprobe_example.ko</em>的内核模块文件，执行<code>insmod jprobe_example.ko</code>后内核模块立即生效，通过<code>dmesg</code>命令可以查看到<em>_do_fork</em>这个函数的调用情况。</p>
+<div class="highlight"><pre><span></span>[22995.253751] jprobe_example: loading out-of-tree module taints kernel.
+[22995.253784] jprobe_example: module verification failed: signature and/or required key missing - tainting kernel
+[22995.256380] Planted jprobe at ffffffff840a5740, handler addr ffffffffc0856000
+[22995.257404] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+[22995.257589] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+[22995.257672] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+[22995.258624] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+[22995.258868] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+[22995.259052] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+[22997.501546] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+[22997.516927] jprobe: clone_flags = 0x1200011, stack_start = 0x0 stack_size = 0x0
+</pre></div>
+            <section>
+<div class="accordion" id="accordion2">
+    <div class="accordion-group">
+        <div class="accordion-heading">
+            <a class="accordion-toggle disqus-comment-count" data-toggle="collapse" data-parent="#accordion2"
+                    data-disqus-identifier="kernelgo"
+                href="https://colo-ft.github.io/pages/jprobe.html#disqus_thread">
+                Comments
+            </a>
+        </div>
+        <div id="disqus_thread" class="accordion-body collapse">
+            <div class="accordion-inner">
+                <div class="comments">
+                    <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'Tiny-boat';
+        var disqus_identifier = 'kernelgo';
+    var disqus_url = 'https://colo-ft.github.io/pages/jprobe.html';
+
+    (function() {
+         var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+         dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+         (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+     })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+        </div>
+        <section>
+        <div class="span2" style="float:right;font-size:0.9em;">
+<h4>Contact</h4>
+    <a href="https://github.com/colo-ft" title="My github Profile" class="sidebar-social-links" target="_blank">
+    <i class="fa fa-github sidebar-social-links"></i></a>
+    <a href="#" title="My Another social link Profile" class="sidebar-social-links" target="_blank">
+    <i class="fa fa-another social link sidebar-social-links"></i></a>
+        </div>
+        </section>
+    </div>
+    </article>
+                </div>
+                <div class="span1"></div>
+            </div>
+        </div>
+        <div id="push"></div>
+    </div>
+<footer>
+<div id="footer">
+    <ul class="footer-content">
+        <li class="elegant-license"><span xmlns:dct="http://purl.org/dc/terms/" property="dct:title"> kernelgo"</span> by <a xmlns:cc="http://creativecommons.org/ns#" href="https://kernelgo.org" property="cc:attributionName" rel="cc:attributionURL">hailiang zhang</a> is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/3.0/deed.en_US">Creative Commons Attribution-ShareAlike 3.0 Unported License</a>.</li>
+        <li class="elegant-power">Powered by <a href="http://getpelican.com/" title="Pelican Home Page">Pelican</a>. Theme: <a href="http://oncrashreboot.com/pelican-elegant" title="Theme Elegant Home Page">Elegant</a> by <a href="http://oncrashreboot.com" title="Talha Mansoor Home Page">Talha Mansoor</a></li>
+    </ul>
+</div>
+</footer>            <script src="http://code.jquery.com/jquery.min.js"></script>
+        <script src="//netdna.bootstrapcdn.com/twitter-bootstrap/2.3.2/js/bootstrap.min.js"></script>
+        <script>
+            function validateForm(query)
+            {
+                return (query.length > 0);
+            }
+        </script>
+
+            <script type="text/javascript">
+var disqus_shortname = 'Tiny-boat';
+(function () {
+    var s = document.createElement('script'); s.async = true;
+    s.type = 'text/javascript';
+    s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+    (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+}());
+</script>
+<script  language="javascript" type="text/javascript">
+function uncollapse() {
+    if (window.location.hash.match(/^#comment-\d+$/)) {
+        $('#disqus_thread').collapse('show');
+    }
+}
+</script>
+<script type="text/javascript" language="JavaScript">
+uncollapse();
+window.onhashchange=function(){
+    if (window.location.hash.match(/^#comment-\d+$/))
+        window.location.reload(true);
+}
+</script>
+<script>
+$('#disqus_thread').on('shown', function () {
+    var link = document.getElementsByClassName('accordion-toggle');
+    var old_innerHTML = link[0].innerHTML;
+    $(link[0]).fadeOut(500, function() {
+        $(this).text('Click here to hide comments').fadeIn(500);
+    });
+    $('#disqus_thread').on('hidden', function () {
+        $(link[0]).fadeOut(500, function() {
+            $(this).text(old_innerHTML).fadeIn(500);
+        });
+    })
+})
+</script>
+
+
+    </body>
+    <!-- Theme: Elegant built for Pelican
+    License : http://oncrashreboot.com/pelican-elegant -->
+</html>
